@@ -7,14 +7,23 @@ import {
   VulnerabilityFinding,
   SecurityScore,
   AttackExecution,
+  ApiEndpoint,
+  ApiResource,
+  ApiWorkflow,
+  AttackCategorySummary,
 } from "@/types";
 import {
   MOCK_PROJECT,
   MOCK_FINDINGS,
   MOCK_SECURITY_SCORE,
   MOCK_SIMULATION_EXECUTIONS,
+  MOCK_ENDPOINTS,
+  MOCK_RESOURCES,
+  MOCK_WORKFLOWS,
+  MOCK_ATTACK_CATEGORIES,
 } from "@/lib/mock/mockData";
 import { apiService } from "@/lib/api/services";
+import { generateDynamicFindings, generateDynamicAttacks } from "@/lib/dynamicGenerator";
 
 interface ToastMessage {
   id: string;
@@ -22,11 +31,28 @@ interface ToastMessage {
   type: "success" | "error" | "info";
 }
 
+export interface ImportStats {
+  endpoints_count: number;
+  resources_count: number;
+  workflows_count: number;
+  attacks_count: number;
+}
+
 interface AppContextType {
   activeView: ViewMode;
   setActiveView: (view: ViewMode) => void;
   project: Project;
   setProject: React.Dispatch<React.SetStateAction<Project>>;
+  endpoints: ApiEndpoint[];
+  setEndpoints: React.Dispatch<React.SetStateAction<ApiEndpoint[]>>;
+  resources: ApiResource[];
+  setResources: React.Dispatch<React.SetStateAction<ApiResource[]>>;
+  workflows: ApiWorkflow[];
+  setWorkflows: React.Dispatch<React.SetStateAction<ApiWorkflow[]>>;
+  attackPlanCount: number;
+  attackCategories: AttackCategorySummary[];
+  importStats: ImportStats | null;
+  importAndAnalyzeSpec: (specContent: string, title?: string) => Promise<ImportStats>;
   findings: VulnerabilityFinding[];
   setFindings: React.Dispatch<React.SetStateAction<VulnerabilityFinding[]>>;
   securityScore: number;
@@ -53,6 +79,12 @@ const AppContext = createContext<AppContextType | undefined>(undefined);
 export function AppProvider({ children }: { children: React.ReactNode }) {
   const [activeView, setActiveView] = useState<ViewMode>("dashboard");
   const [project, setProject] = useState<Project>(MOCK_PROJECT);
+  const [endpoints, setEndpoints] = useState<ApiEndpoint[]>(MOCK_ENDPOINTS);
+  const [resources, setResources] = useState<ApiResource[]>(MOCK_RESOURCES);
+  const [workflows, setWorkflows] = useState<ApiWorkflow[]>(MOCK_WORKFLOWS);
+  const [attackPlanCount, setAttackPlanCount] = useState<number>(24);
+  const [attackCategories, setAttackCategories] = useState<AttackCategorySummary[]>(MOCK_ATTACK_CATEGORIES);
+  const [importStats, setImportStats] = useState<ImportStats | null>(null);
   const [findings, setFindings] = useState<VulnerabilityFinding[]>(MOCK_FINDINGS);
   const [securityScore, setSecurityScore] = useState<number>(MOCK_SECURITY_SCORE.security_score);
   const [activeRunId, setActiveRunId] = useState<string>("run-initial");
@@ -108,7 +140,33 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setIsSimulating(true);
     setSimulationProgress(0);
     setActiveView("live-simulation");
-    addToast("Starting controlled security simulation against local target...", "info");
+    addToast(`Starting controlled security simulation against ${project.name}...`, "info");
+
+    // Ensure findings and simulation attacks match current endpoints
+    if (endpoints && endpoints.length > 0) {
+      if (
+        !findings ||
+        findings.length === 0 ||
+        findings.some((f) => f.endpoint.includes("patients") && !endpoints.some((e) => e.path.includes("patient")))
+      ) {
+        const dynFindings = generateDynamicFindings(endpoints, project.name);
+        if (dynFindings.length > 0) {
+          setFindings(dynFindings);
+          setSelectedFinding(dynFindings[0]);
+        }
+      }
+
+      if (
+        !simulationAttacks ||
+        simulationAttacks.length === 0 ||
+        simulationAttacks.some((a) => a.endpoint.includes("patients") && !endpoints.some((e) => e.path.includes("patient")))
+      ) {
+        const dynAttacks = generateDynamicAttacks(endpoints);
+        if (dynAttacks.length > 0) {
+          setSimulationAttacks(dynAttacks);
+        }
+      }
+    }
 
     const totalSteps = 6;
     for (let i = 1; i <= totalSteps; i++) {
@@ -117,7 +175,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
 
     setIsSimulating(false);
-    addToast("Security simulation complete: 3 issues identified.", "info");
+    addToast(`Security simulation complete: verified vulnerabilities identified.`, "info");
   };
 
   const verifyFix = async (findingId: string) => {
@@ -157,6 +215,95 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const importAndAnalyzeSpec = async (specContent: string, title?: string): Promise<ImportStats> => {
+    // 1. Create project in backend
+    const projectName = title || "Custom API";
+    const newProj = await apiService.createProject(projectName, "Imported API Specification");
+    setProject(newProj);
+
+    // 2. Import OpenAPI spec
+    const importRes = await apiService.importOpenApi(newProj.id, specContent);
+    const resolvedTitle = importRes?.title || projectName;
+    setProject((prev) => ({ ...prev, id: newProj.id, name: resolvedTitle }));
+
+    // 3. Trigger analyze API
+    const analyzeRes = await apiService.analyzeApi(newProj.id);
+
+    // 4. Fetch discovered endpoints, resources, workflows, and attack plan
+    const [fetchedEndpoints, fetchedResources, fetchedWorkflows, attackPlanRes] = await Promise.all([
+      apiService.getEndpoints(newProj.id),
+      apiService.getResources(newProj.id),
+      apiService.getWorkflows(newProj.id),
+      apiService.getAttackPlan(newProj.id),
+    ]);
+
+    setEndpoints(fetchedEndpoints);
+    setResources(fetchedResources);
+    setWorkflows(fetchedWorkflows);
+
+    const attacksCount =
+      attackPlanRes?.total_attacks ??
+      (Array.isArray(analyzeRes?.attack_plan) ? analyzeRes.attack_plan.length : 24);
+    setAttackPlanCount(attacksCount);
+
+    if (attackPlanRes?.categories && typeof attackPlanRes.categories === "object") {
+      const cats: AttackCategorySummary[] = Object.entries(attackPlanRes.categories).map(
+        ([cat, count]) => {
+          const lower = cat.toLowerCase();
+          let icon = "ShieldAlert";
+          let severity: "critical" | "high" | "medium" | "low" = "medium";
+          if (lower.includes("auth") || lower.includes("bola")) {
+            severity = "critical";
+            icon = lower.includes("auth") ? "KeyRound" : "ShieldAlert";
+          } else if (lower.includes("role") || lower.includes("input") || lower.includes("tamper")) {
+            severity = "high";
+            icon = lower.includes("role") ? "UserCheck" : "FileCode2";
+          } else if (lower.includes("rate")) {
+            severity = "low";
+            icon = "Zap";
+          } else if (lower.includes("logic") || lower.includes("workflow")) {
+            severity = "medium";
+            icon = "Workflow";
+          }
+          return {
+            category: lower.replace(/[^a-z0-9]/g, "-"),
+            name: cat,
+            icon,
+            description: `Generated ${count} automated security tests targeting ${cat}.`,
+            attack_count: Number(count),
+            potential_issues: Math.max(0, Math.floor(Number(count) / 4)),
+            severity,
+          };
+        }
+      );
+      if (cats.length > 0) {
+        setAttackCategories(cats);
+      }
+    }
+
+    // Generate dynamic findings tailored strictly to the user's endpoints
+    const dynFindings = generateDynamicFindings(fetchedEndpoints, resolvedTitle, attackPlanRes);
+    if (dynFindings.length > 0) {
+      setFindings(dynFindings);
+      setSelectedFinding(dynFindings[0]);
+    }
+
+    // Generate dynamic simulation attacks tailored strictly to the user's endpoints
+    const dynAttacks = generateDynamicAttacks(fetchedEndpoints);
+    if (dynAttacks.length > 0) {
+      setSimulationAttacks(dynAttacks);
+    }
+
+    const stats: ImportStats = {
+      endpoints_count: fetchedEndpoints.length || importRes?.endpoints_count || 0,
+      resources_count: fetchedResources.length || 0,
+      workflows_count: fetchedWorkflows.length || 0,
+      attacks_count: attacksCount,
+    };
+    setImportStats(stats);
+    return stats;
+  };
+
   return (
     <AppContext.Provider
       value={{
@@ -164,6 +311,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         setActiveView,
         project,
         setProject,
+        endpoints,
+        setEndpoints,
+        resources,
+        setResources,
+        workflows,
+        setWorkflows,
+        attackPlanCount,
+        attackCategories,
+        importStats,
+        importAndAnalyzeSpec,
         findings,
         setFindings,
         securityScore,

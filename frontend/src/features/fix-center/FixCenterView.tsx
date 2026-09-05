@@ -29,7 +29,7 @@ export const FixCenterView: React.FC = () => {
     "Preparing verification probe",
     "Executing targeted attack against local target",
     "Comparing response status & payload structure",
-    "Checking dependent clinical workflows",
+    "Checking dependent API workflows",
   ];
 
   const handleVerify = async (finding: VulnerabilityFinding) => {

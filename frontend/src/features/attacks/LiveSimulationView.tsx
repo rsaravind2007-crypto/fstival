@@ -24,12 +24,21 @@ export const LiveSimulationView: React.FC = () => {
     setActiveView,
     findings,
     setSelectedFinding,
+    attackPlanCount,
+    simulationAttacks,
+    project,
   } = useApp();
 
   const [expandedLogs, setExpandedLogs] = useState(false);
 
-  const completedCount = Math.round((simulationProgress / 100) * 24);
-  const detectedFinding = findings.find((f) => f.severity === "critical");
+  const currentAttacks =
+    simulationAttacks && simulationAttacks.length > 0
+      ? simulationAttacks
+      : MOCK_SIMULATION_EXECUTIONS;
+
+  const totalProbes = attackPlanCount || currentAttacks.length || 24;
+  const completedCount = Math.round((simulationProgress / 100) * totalProbes);
+  const detectedFinding = findings.find((f) => f.severity === "critical") || findings[0];
 
   return (
     <div className="space-y-8 animate-fade-in">
@@ -59,7 +68,7 @@ export const LiveSimulationView: React.FC = () => {
 
           <div className="text-right">
             <span className="text-2xl font-bold text-[#1D1D1F]">
-              {completedCount} <span className="text-[#86868B] text-base font-normal">/ 24</span>
+              {completedCount} <span className="text-[#86868B] text-base font-normal">/ {totalProbes}</span>
             </span>
             <p className="text-xs text-[#6E6E73] font-medium">{simulationProgress}% Finished</p>
           </div>
@@ -121,7 +130,7 @@ export const LiveSimulationView: React.FC = () => {
         </div>
 
         <div className="divide-y divide-black/[0.04]">
-          {MOCK_SIMULATION_EXECUTIONS.map((atk, index) => {
+          {currentAttacks.map((atk, index) => {
             const isFinished = index <= completedCount / 4;
             return (
               <div
@@ -187,17 +196,24 @@ export const LiveSimulationView: React.FC = () => {
           {expandedLogs && (
             <div className="mt-3 p-4 bg-[#1D1D1F] text-white/90 rounded-apple font-mono text-xs overflow-x-auto space-y-1.5 animate-fade-in">
               <p className="text-emerald-400">
-                [2026-08-27T14:40:12Z] [BrunoRunner] Initializing collection runner...
+                [BrunoRunner] Initializing collection runner for {project.name}...
               </p>
               <p className="text-white/70">
-                [2026-08-27T14:40:12Z] [SafetyValidator] Verified local environment target (127.0.0.1)
+                [SafetyValidator] Verified local environment target ({project.target_base_url || "127.0.0.1"})
               </p>
-              <p className="text-white/70">
-                [2026-08-27T14:40:13Z] [Step 1] GET /patients/102 (Token: [REDACTED]) -&gt; HTTP 200 OK (24.5ms)
-              </p>
-              <p className="text-rose-400">
-                [2026-08-27T14:40:13Z] [Assertion Error] Expected 403 Forbidden, Received 200 OK (BOLA Detected)
-              </p>
+              {currentAttacks.slice(0, 4).map((atk, idx) => (
+                <React.Fragment key={atk.id || idx}>
+                  <p className="text-white/70">
+                    [Step {idx + 1}] {atk.method} {atk.endpoint} (Token: [REDACTED]) -&gt; HTTP{" "}
+                    {atk.status === "failed" ? "200 OK (Unexpected)" : "403 Forbidden"} ({atk.duration_ms || 24}ms)
+                  </p>
+                  {atk.status === "failed" && (
+                    <p className="text-rose-400">
+                      [Assertion Error] Expected 403 Forbidden, Received 200 OK ({atk.category} Detected)
+                    </p>
+                  )}
+                </React.Fragment>
+              ))}
             </div>
           )}
         </div>

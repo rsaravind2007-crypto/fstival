@@ -24,6 +24,7 @@ export const DashboardView: React.FC = () => {
     setActiveView,
     startSimulation,
     setSelectedFinding,
+    attackPlanCount,
   } = useApp();
 
   const criticals = findings.filter(
@@ -225,7 +226,7 @@ export const DashboardView: React.FC = () => {
                     Run Security Simulation
                   </span>
                   <span className="text-[11px] text-[#86868B]">
-                    Execute 24 automated Bruno probes
+                    Execute {attackPlanCount} automated Bruno probes
                   </span>
                 </div>
               </div>

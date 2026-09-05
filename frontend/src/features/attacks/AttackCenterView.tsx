@@ -20,8 +20,11 @@ import { Modal } from "@/components/ui/Modal";
 import { MOCK_ATTACK_CATEGORIES } from "@/lib/mock/mockData";
 
 export const AttackCenterView: React.FC = () => {
-  const { project, startSimulation, setActiveView } = useApp();
+  const { project, startSimulation, setActiveView, attackCategories, attackPlanCount } = useApp();
   const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
+
+  const currentCategories =
+    attackCategories && attackCategories.length > 0 ? attackCategories : MOCK_ATTACK_CATEGORIES;
 
   const getIcon = (iconName: string) => {
     switch (iconName) {
@@ -69,7 +72,7 @@ export const AttackCenterView: React.FC = () => {
 
       {/* Categorized Test Suites Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {MOCK_ATTACK_CATEGORIES.map((cat) => {
+        {currentCategories.map((cat) => {
           const Icon = getIcon(cat.icon);
           return (
             <div
@@ -135,7 +138,7 @@ export const AttackCenterView: React.FC = () => {
             </div>
             <div className="flex justify-between">
               <span className="text-[#86868B]">Planned Attacks:</span>
-              <span className="font-semibold text-[#0071E3]">24 Scenarios</span>
+              <span className="font-semibold text-[#0071E3]">{attackPlanCount} Scenarios</span>
             </div>
           </div>
 

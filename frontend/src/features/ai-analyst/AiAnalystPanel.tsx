@@ -15,7 +15,7 @@ import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 
 export const AiAnalystPanel: React.FC = () => {
-  const { setActiveView, setSelectedFinding, findings } = useApp();
+  const { setActiveView, setSelectedFinding, findings, project } = useApp();
 
   const topFinding = findings.find((f) => f.severity === "critical") || findings[0];
 
@@ -46,67 +46,76 @@ export const AiAnalystPanel: React.FC = () => {
               Key Advisory Insight
             </span>
             <h2 className="text-base font-bold text-[#1D1D1F]">
-              API Guardian found something important in your clinical API.
+              API Guardian found actionable security findings in {project?.name || "your API"}.
             </h2>
           </div>
         </div>
 
-        {/* Highlighted BOLA finding */}
-        <div className="p-5 rounded-apple-xl bg-[#F5F5F7] border border-black/[0.04] space-y-4">
-          <div className="flex items-center justify-between flex-wrap gap-2">
-            <div className="flex items-center gap-2">
-              <Badge variant="critical">CRITICAL RISK</Badge>
-              <span className="font-mono text-xs font-bold text-[#1D1D1F]">
-                GET /patients/&#123;id&#125;
-              </span>
+        {topFinding && (
+          <div className="p-5 rounded-apple-xl bg-[#F5F5F7] border border-black/[0.04] space-y-4">
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <div className="flex items-center gap-2">
+                <Badge variant={topFinding.severity}>
+                  {topFinding.severity.toUpperCase()} RISK
+                </Badge>
+                <span className="font-mono text-xs font-bold text-[#1D1D1F]">
+                  {topFinding.method} {topFinding.endpoint}
+                </span>
+              </div>
+              <span className="text-xs text-[#86868B]">{topFinding.type}</span>
             </div>
-            <span className="text-xs text-[#86868B]">OWASP API1:2023</span>
-          </div>
 
-          <div className="space-y-1">
-            <h4 className="text-xs font-bold text-[#1D1D1F] uppercase tracking-wider">
-              Why did this fail?
-            </h4>
-            <p className="text-xs text-[#6E6E73] leading-relaxed">
-              The endpoint accepts a user-controlled patient ID in the path but does not verify that the requesting session identity owns the record before returning sensitive protected health data.
-            </p>
-          </div>
+            <div className="space-y-1">
+              <h4 className="text-xs font-bold text-[#1D1D1F] uppercase tracking-wider">
+                Why did this fail?
+              </h4>
+              <p className="text-xs text-[#6E6E73] leading-relaxed">
+                {topFinding.simple_explanation ||
+                  topFinding.confirmed_impact ||
+                  "The endpoint accepts user-controlled input without enforcing authorization boundaries or input constraints."}
+              </p>
+            </div>
 
-          <div className="space-y-1">
-            <h4 className="text-xs font-bold text-[#1D1D1F] uppercase tracking-wider">
-              Recommended Action:
-            </h4>
-            <p className="text-xs text-emerald-800 bg-emerald-50/80 p-3 rounded-apple border border-emerald-200/80 leading-relaxed font-medium">
-              Check that the authenticated user is authorized to access the requested patient before returning the resource:
-              <br />
-              <code className="font-mono text-[11px] text-emerald-900 mt-1 block">
-                if patient.user_id != current_user.id: raise HTTPException(status_code=403)
-              </code>
-            </p>
-          </div>
+            <div className="space-y-1">
+              <h4 className="text-xs font-bold text-[#1D1D1F] uppercase tracking-wider">
+                Recommended Action:
+              </h4>
+              <div className="text-xs text-emerald-800 bg-emerald-50/80 p-3 rounded-apple border border-emerald-200/80 leading-relaxed font-medium space-y-2">
+                <p>
+                  {topFinding.remediation?.what_to_change ||
+                    "Implement schema validation and resource ownership checks before processing requests."}
+                </p>
+                {topFinding.remediation?.example_pseudocode && (
+                  <pre className="font-mono text-[11px] text-emerald-950 bg-white/70 p-2.5 rounded-apple overflow-x-auto border border-emerald-200/50">
+                    {topFinding.remediation.example_pseudocode}
+                  </pre>
+                )}
+              </div>
+            </div>
 
-          <div className="flex items-center gap-3 pt-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                if (topFinding) setSelectedFinding(topFinding);
-                setActiveView("vulnerabilities");
-              }}
-              icon={<ShieldAlert className="w-3.5 h-3.5" />}
-            >
-              Show Attack
-            </Button>
-            <Button
-              variant="primary"
-              size="sm"
-              onClick={() => setActiveView("fix-center")}
-              icon={<Wrench className="w-3.5 h-3.5" />}
-            >
-              Verify Fix
-            </Button>
+            <div className="flex items-center gap-3 pt-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setSelectedFinding(topFinding);
+                  setActiveView("vulnerabilities");
+                }}
+                icon={<ShieldAlert className="w-3.5 h-3.5" />}
+              >
+                Show Attack
+              </Button>
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={() => setActiveView("fix-center")}
+                icon={<Wrench className="w-3.5 h-3.5" />}
+              >
+                Verify Fix
+              </Button>
+            </div>
           </div>
-        </div>
+        )}
       </div>
 
       {/* Secondary AI Observations Grid */}

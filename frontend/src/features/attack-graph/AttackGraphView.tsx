@@ -18,10 +18,18 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { MOCK_ATTACK_GRAPH, MOCK_ATTACK_CHAINS } from "@/lib/mock/mockData";
 import { GraphNode } from "@/types";
+import { generateDynamicAttackGraph } from "@/lib/dynamicGenerator";
 
 export const AttackGraphView: React.FC = () => {
-  const { setActiveView, setSelectedFinding, findings } = useApp();
+  const { setActiveView, setSelectedFinding, findings, endpoints, project } = useApp();
   const [selectedNode, setSelectedNode] = useState<GraphNode | null>(null);
+
+  const dynamicData =
+    endpoints && endpoints.length > 0 && findings && findings.length > 0
+      ? generateDynamicAttackGraph(findings, endpoints, project.name)
+      : { graph: MOCK_ATTACK_GRAPH, chains: MOCK_ATTACK_CHAINS };
+
+  const activeChain = dynamicData.chains[0] || MOCK_ATTACK_CHAINS[0];
 
   const getNodeIcon = (type: string) => {
     switch (type) {
@@ -84,20 +92,20 @@ export const AttackGraphView: React.FC = () => {
         <div className="flex items-center justify-between border-b border-black/[0.04] pb-4">
           <div>
             <h3 className="text-sm font-semibold text-[#1D1D1F]">
-              Primary Exploit Chain: Cross-Tenant Medical Record Exfiltration
+              Primary Exploit Chain: {activeChain.title}
             </h3>
             <p className="text-xs text-[#86868B] mt-0.5">
               Click any node in the path to inspect its blast radius and parameters.
             </p>
           </div>
           <span className="text-xs font-bold text-rose-600 bg-rose-50 px-3 py-1 rounded-full border border-rose-200">
-            Chain Risk: 95 / 100
+            Chain Risk: {activeChain.overall_risk} / 100
           </span>
         </div>
 
         {/* Graph Horizontal Flow */}
         <div className="flex flex-wrap items-center justify-center gap-4 py-8 overflow-x-auto">
-          {MOCK_ATTACK_CHAINS[0].nodes.map((node, idx) => {
+          {activeChain.nodes.map((node, idx) => {
             const Icon = getNodeIcon(node.type);
             const isSelected = selectedNode?.id === node.id;
 
@@ -136,7 +144,7 @@ export const AttackGraphView: React.FC = () => {
         <div className="p-4 bg-[#F5F5F7] rounded-apple border border-black/[0.04] text-xs text-[#6E6E73] flex items-center gap-3">
           <Info className="w-4 h-4 text-[#0071E3] flex-shrink-0" />
           <span>
-            <strong>Impact Assessment:</strong> This chain allows unprivileged authenticated users to access 10,000+ patient charts without detection.
+            <strong>Impact Assessment:</strong> This chain allows unprivileged authenticated users to access sensitive tenant records without detection.
           </span>
         </div>
       </div>
