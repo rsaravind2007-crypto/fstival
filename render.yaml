@@ -18,4 +18,10 @@ services:
       - key: ALLOWED_ORIGINS
         value: '["*"]'
       - key: DATABASE_URL
-        sync: false
+        fromDatabase:
+          name: api-guardian-db
+          property: connectionString
+
+databases:
+  - name: api-guardian-db
+    plan: free
