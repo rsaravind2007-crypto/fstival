@@ -1,0 +1,12 @@
+.git
+.venv
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache
+.coverage
+frontend/node_modules
+frontend/.next
+api_guardian.db
+generated
